@@ -764,6 +764,7 @@ const S = {
   turnScores: [],       // per-turn score history
   bestTurn: null,       // highest single-turn score
   explanation: null,
+  evalFen: null,    // FEN at evaluation time (pre-move), used for Claude context
   chatMessages: [], // [{role:'assistant',content:...},{role:'user',content:...},...]
   moveHistory: [],      // [{num, white, black}]
   lastMove: null,       // {from, to}
@@ -1407,9 +1408,17 @@ async function evaluateGuesses() {
   S.phase = 'evaluating';
   updateUI();
 
-  // Analyze enough lines to cover guesses + some extras
+  S.evalFen = S.chess.fen();
+
+  // Use pre-fetched analysis if available (started when guessing phase began)
   const multiPV = Math.max(S.guesses.length * 2, 6);
-  const results = await engine.analyze(S.chess.fen(), 15, multiPV);
+  let results;
+  if (_pendingEval) {
+    results = await _pendingEval;
+    _pendingEval = null;
+  } else {
+    results = await engine.analyze(S.evalFen, 15, multiPV);
+  }
 
   // Convert to SAN with raw cp values
   S.topMoves = results.map(r => {
@@ -1464,6 +1473,8 @@ async function evaluateGuesses() {
 // SIMPLE MODE EVALUATION
 // ============================================================
 async function evaluateSimpleMove(preFen, moveSan, moveFrom, moveTo) {
+  S.evalFen = preFen;
+
   // Use pre-computed eval if available, otherwise compute now
   let results;
   if (_pendingEval) {
@@ -1568,7 +1579,7 @@ async function startGame() {
   S.turnScore = null;
   S.turnScores = [];
   S.bestTurn = null;
-  S.explanation = null; S.chatMessages = [];
+  S.explanation = null; S.evalFen = null; S.chatMessages = [];
   S.lastMove = null;
   S.selectedSquare = null;
   S.legalMoves = [];
@@ -1692,6 +1703,7 @@ async function botPlay() {
     S.pairResults = [];
     S.topMoves = [];
     S.explanation = null; S.chatMessages = [];
+    _pendingEval = engine.analyze(S.chess.fen(), 15, 10); // pre-fetch while player thinks
   }
   updateUI();
   renderBoard();
@@ -1739,7 +1751,7 @@ async function askClaude(followUp) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        fen: S.chess.fen(),
+        fen: S.evalFen || S.chess.fen(),
         guesses,
         topMoves: S.topMoves,
         playerColor: S.playerColor,
