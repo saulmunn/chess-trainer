@@ -878,7 +878,8 @@ class Engine {
   }
 }
 
-const engine = new Engine();
+const engine = new Engine();    // analysis worker (multi-PV, position eval)
+const botEngine = new Engine(); // bot-move worker (single best move)
 let _pendingBotMove = null; // pre-computed bot move promise
 let _pendingEval = null;    // pre-computed eval promise (runs while player thinks)
 
@@ -1545,7 +1546,7 @@ async function evaluateSimpleMove(preFen, moveSan, moveFrom, moveTo) {
   };
 
   // Pre-compute bot's reply while user reviews
-  _pendingBotMove = engine.bestMove(S.chess.fen(), S.engineDepth);
+  _pendingBotMove = botEngine.bestMove(S.chess.fen(), S.engineDepth);
 
   S.phase = 'waiting'; // wait for timer or space to continue
   updateUI();
@@ -1560,8 +1561,9 @@ async function startGame() {
   const overlay = document.getElementById('loading-overlay');
   overlay.classList.add('active');
   try {
-    await engine.init();
+    await Promise.all([engine.init(), botEngine.init()]);
     engine.send('ucinewgame');
+    botEngine.send('ucinewgame');
   } catch (err) {
     overlay.querySelector('div:last-child').textContent = 'Failed to load Stockfish. Please refresh.';
     return;
@@ -1658,7 +1660,7 @@ async function botPlay() {
     uci = await _pendingBotMove;
     _pendingBotMove = null;
   } else {
-    uci = await engine.bestMove(S.chess.fen(), S.engineDepth);
+    uci = await botEngine.bestMove(S.chess.fen(), S.engineDepth);
   }
   const from = uci.substring(0, 2);
   const to = uci.substring(2, 4);
