@@ -1,0 +1,2167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Trainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+:root {
+  --light-sq: #f0d9b5;
+  --dark-sq: #b58863;
+  --bg: #161512;
+  --card: #262522;
+  --border: #3a3835;
+  --accent: #7fba2c;
+  --text: #bababa;
+  --text-bright: #e0e0e0;
+  --select-light: #829769;
+  --select-dark: #646d40;
+  --last-light: #ced26b;
+  --last-dark: #aba23a;
+  --guess-light: #b4d97c;
+  --guess-dark: #7ba33a;
+  --match: #7fba2c;
+  --miss: #e05555;
+  --board-size: min(calc(100vh - 60px), calc(100vw - 380px), 720px);
+  --sq: calc(var(--board-size) / 8);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Setup Screen ── */
+#setup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+.setup-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 420px;
+  width: 100%;
+}
+.setup-card h1 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 32px;
+  color: var(--text-bright);
+  text-align: center;
+  margin-bottom: 32px;
+}
+.setup-option {
+  margin-bottom: 24px;
+}
+.setup-option label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.btn-group {
+  display: flex;
+  gap: 8px;
+}
+.btn-group button {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-group button:hover { border-color: var(--accent); }
+.btn-group button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.depth-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.depth-row input[type=range] {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 6px;
+}
+.depth-row span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-bright);
+  min-width: 28px;
+  text-align: right;
+}
+#start-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity 0.15s;
+}
+#start-btn:hover { opacity: 0.9; }
+
+/* ── Game Screen ── */
+#game {
+  display: none;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 16px;
+  gap: 16px;
+}
+#game.active {
+  display: flex;
+}
+
+/* ── Board ── */
+#board-wrap {
+  position: relative;
+  width: var(--board-size);
+  min-width: var(--board-size);
+}
+#board {
+  display: grid;
+  grid-template-columns: repeat(8, var(--sq));
+  grid-template-rows: repeat(8, var(--sq));
+  border-radius: 4px;
+  overflow: hidden;
+}
+.square {
+  width: var(--sq);
+  height: var(--sq);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+.square.light { background: var(--light-sq); }
+.square.dark { background: var(--dark-sq); }
+.square.selected.light { background: var(--select-light); }
+.square.selected.dark { background: var(--select-dark); }
+.square.last-move.light { background: var(--last-light); }
+.square.last-move.dark { background: var(--last-dark); }
+.square.guess-hl.light { background: var(--guess-light); }
+.square.guess-hl.dark { background: var(--guess-dark); }
+.square.check {
+  background: radial-gradient(ellipse at center, rgba(255,0,0,0.6) 0%, rgba(200,0,0,0.3) 50%, transparent 70%);
+}
+.square img {
+  width: 88%;
+  height: 88%;
+  pointer-events: none;
+  filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.3));
+}
+.legal-dot {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.legal-dot.move {
+  width: 28%;
+  height: 28%;
+  background: rgba(0,0,0,0.15);
+}
+.legal-dot.capture {
+  width: 100%;
+  height: 100%;
+  border: calc(var(--sq) * 0.12) solid rgba(0,0,0,0.15);
+  background: transparent;
+}
+.coord {
+  position: absolute;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+  z-index: 2;
+}
+.coord-rank {
+  top: 2px;
+  left: 3px;
+}
+.coord-file {
+  bottom: 1px;
+  right: 3px;
+}
+.square.light .coord { color: var(--dark-sq); }
+.square.dark .coord { color: var(--light-sq); }
+
+/* ── Clock ── */
+#board-col { display: flex; flex-direction: column; gap: 10px; }
+#clock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+#clock.paused { opacity: 0.45; }
+#clock.low { color: var(--miss); }
+#clock-icon { font-size: 16px; }
+
+/* ── SVG Arrow Overlay ── */
+#board-arrows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+#board-wrap.review-mode {
+  box-shadow: 0 0 0 2px rgba(127, 186, 44, 0.5);
+  border-radius: 6px;
+}
+
+/* ── Timer Bar ── */
+#timer-bar-wrap {
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#timer-bar-wrap.active { opacity: 1; }
+#timer-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 0 0 4px 4px;
+  transition: width linear;
+}
+#timer-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+#timer-hint.active {
+  opacity: 0.7;
+  height: auto;
+  padding-top: 4px;
+}
+
+/* ── Panel ── */
+#panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+#phase-banner {
+  text-align: center;
+  padding: 16px 14px;
+}
+#phase-banner h2 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 22px;
+  color: var(--text-bright);
+  margin-bottom: 4px;
+}
+#phase-banner p {
+  font-size: 14px;
+  color: var(--text);
+}
+.badge {
+  display: inline-block;
+  background: rgba(127,186,44,0.15);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  margin-top: 6px;
+}
+
+/* Guess list */
+.guess-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+}
+.guess-item:last-child { border-bottom: none; }
+.guess-item .san { color: var(--text-bright); }
+.guess-item .remove-guess {
+  background: none;
+  border: none;
+  color: var(--miss);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  line-height: 1;
+}
+.guess-item .result-icon {
+  font-size: 16px;
+  font-weight: 700;
+}
+.guess-item .result-icon.match { color: var(--match); }
+.guess-item .result-icon.miss { color: var(--miss); }
+
+/* Top moves */
+.top-move {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.top-move:last-child { border-bottom: none; }
+.top-move .rank { color: var(--text); min-width: 24px; }
+.top-move .move-san { color: var(--text-bright); }
+.top-move .eval { color: var(--text); }
+
+/* Explanation */
+#explanation-section p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-bright);
+}
+
+/* Move history */
+#history-section {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.move-row {
+  display: flex;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  padding: 3px 10px;
+}
+.move-num { color: var(--text); min-width: 32px; }
+.move-white, .move-black {
+  min-width: 64px;
+  color: var(--text-bright);
+  cursor: pointer;
+}
+
+/* Action buttons */
+.btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.9; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.btn-muted {
+  background: var(--border);
+  color: var(--text);
+}
+#actions { display: flex; flex-direction: column; gap: 8px; }
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Score animations ── */
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+@keyframes score-flash-green {
+  0% { color: var(--accent); }
+  100% { color: var(--text-bright); }
+}
+@keyframes score-flash-red {
+  0% { color: var(--miss); }
+  100% { color: var(--text-bright); }
+}
+@keyframes float-up {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-28px); }
+}
+.score-pop {
+  animation: score-pop 0.35s ease-out;
+}
+.score-up {
+  animation: score-flash-green 0.8s ease-out;
+}
+.score-down {
+  animation: score-flash-red 0.8s ease-out;
+}
+.score-float {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: float-up 1.2s ease-out forwards;
+  z-index: 10;
+}
+#score-bar { position: relative; overflow: visible; }
+.turn-score-reveal {
+  animation: score-pop 0.4s ease-out;
+}
+
+/* ── Comparison table ── */
+.compare-table { width: 100%; border-collapse: collapse; }
+.compare-table th {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  padding: 4px 6px 6px;
+  text-align: left;
+}
+.compare-table td {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  padding: 5px 6px;
+  border-top: 1px solid var(--border);
+}
+.compare-table .col-rank { width: 24px; color: var(--text); }
+.compare-table .col-move { color: var(--text-bright); }
+.compare-table .col-eval { color: var(--text); font-size: 12px; }
+.compare-table .col-diff { font-size: 12px; text-align: right; }
+.compare-table .found { color: var(--accent); }
+.compare-table .missed { color: var(--miss); }
+
+/* ── Tooltip ── */
+.tooltip-wrap {
+  position: relative;
+  display: inline-block;
+}
+.tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  vertical-align: middle;
+  margin-left: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tooltip-content {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  width: 280px;
+  background: #1e1e1c;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-bright);
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.tooltip-content.open { display: block; }
+@media (hover: hover) {
+  .tooltip-wrap:hover .tooltip-content { display: block; }
+}
+
+/* ── Promotion Modal ── */
+#promo-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+#promo-modal.active { display: flex; }
+.promo-options {
+  display: flex;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.promo-option {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.promo-option:hover { border-color: var(--accent); }
+.promo-option img { width: 48px; height: 48px; }
+
+/* ── Loading overlay ── */
+#loading-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--text);
+  font-size: 16px;
+}
+#loading-overlay.active { display: flex; }
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Responsive ── */
+@media (max-width: 860px) {
+  :root { --board-size: min(calc(100vw - 24px), 560px); }
+  #game.active { flex-direction: column; align-items: center; padding: 12px; gap: 10px; }
+  #board-col { width: var(--board-size); }
+  #board-wrap { min-width: unset; width: var(--board-size); }
+  #panel { width: 100%; max-width: var(--board-size); }
+  .setup-card { padding: 24px 20px; }
+  .btn { padding: 14px; min-height: 48px; }
+  .btn-group button { padding: 12px 6px; min-height: 48px; }
+  .compare-table td { font-size: 12px; padding: 5px 4px; }
+  .compare-table th { font-size: 9px; padding: 4px 4px 6px; }
+  .tooltip-content { width: min(280px, calc(100vw - 60px)); right: -4px; }
+  .guess-item { padding: 10px; }
+  .square img { width: 92%; height: 92%; }
+}
+</style>
+</head>
+<body>
+
+<!-- Password Gate -->
+<div id="password-gate" style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px">
+  <div class="setup-card" style="text-align:center">
+    <h1>Chess Trainer</h1>
+    <input type="password" id="pw-input" placeholder="Password" autocomplete="off" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-bright);font-family:'DM Sans',sans-serif;font-size:15px;text-align:center;outline:none;margin-bottom:12px">
+    <div id="pw-error" style="color:var(--miss);font-size:13px;height:20px"></div>
+  </div>
+</div>
+
+<!-- Setup Screen -->
+<div id="setup" style="display:none">
+  <div class="setup-card">
+    <h1>Chess Trainer</h1>
+    <div class="setup-option">
+      <label>Game mode</label>
+      <div class="btn-group" id="mode-group">
+        <button data-mode="guess">Guess</button>
+        <button data-mode="simple" class="active">Simple</button>
+      </div>
+    </div>
+    <div class="setup-option">
+      <label>Play as</label>
+      <div class="btn-group" id="color-group">
+        <button data-color="w" class="active">White</button>
+        <button data-color="b">Black</button>
+      </div>
+    </div>
+    <div class="setup-option">
+      <label>Eval starts after move</label>
+      <div class="depth-row">
+        <input type="range" id="opening-slider" min="0" max="10" value="0">
+        <span id="opening-val">0</span>
+      </div>
+    </div>
+    <div class="setup-option">
+      <label>Opponent depth</label>
+      <div class="depth-row">
+        <input type="range" id="depth-slider" min="5" max="22" value="10">
+        <span id="depth-val">10</span>
+      </div>
+    </div>
+    <div class="setup-option">
+      <label>Time (minutes)</label>
+      <div class="depth-row">
+        <input type="range" id="time-slider" min="1" max="30" value="10">
+        <span id="time-val">10</span>
+      </div>
+    </div>
+    <div class="setup-option">
+      <label>Review time (seconds)</label>
+      <div class="depth-row">
+        <input type="range" id="review-slider" min="3" max="30" value="10">
+        <span id="review-val">10</span>
+      </div>
+    </div>
+    <button id="start-btn">Start Game</button>
+  </div>
+</div>
+
+<!-- Game Screen -->
+<div id="game">
+  <div id="board-col">
+    <div id="clock" class="card">
+      <span id="clock-icon">&#9201;</span>
+      <span id="clock-display">10:00</span>
+    </div>
+    <div id="board-wrap">
+      <div id="board"></div>
+      <svg id="board-arrows"></svg>
+      <div id="timer-bar-wrap"><div id="timer-bar"></div></div>
+      <div id="timer-hint"></div>
+    </div>
+  </div>
+  <div id="panel">
+    <div id="score-bar" class="card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;font-family:'JetBrains Mono',monospace;font-size:13px">
+        <span>Avg: <strong id="score-avg">0</strong><span style="color:var(--text)"> / 100</span></span>
+        <span style="font-size:11px;color:var(--text)">Best: <span id="score-best">-</span> &middot; Turns: <span id="score-turns">0</span></span>
+      </div>
+    </div>
+    <div id="phase-banner" class="card"></div>
+    <div id="guess-section" class="card" style="display:none"></div>
+    <div id="actions"></div>
+    <div id="explanation-section" class="card" style="display:none"></div>
+    <div id="history-section" class="card">
+      <div class="section-title">Moves</div>
+      <div id="history-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Promotion Modal -->
+<div id="promo-modal"><div class="promo-options" id="promo-options"></div></div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div>Initializing Stockfish engine...</div>
+</div>
+
+<script>
+// ============================================================
+// PIECE IMAGES (Wikimedia Commons SVGs)
+// ============================================================
+const PIECE_IMG = {
+  wK: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+  wQ: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+  wR: 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+  wB: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+  wN: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+  wP: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+  bK: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+  bQ: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+  bR: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+  bB: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+  bN: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+  bP: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
+};
+
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  phase: 'setup',       // setup|playing|guessing|evaluating|results|waiting|bot-thinking|game-over
+  gameMode: 'simple',   // 'guess' or 'simple'
+  playerColor: 'w',
+  engineDepth: 10,
+  openingMoves: 0,      // free play for this many full moves
+  chess: null,
+  flipped: false,
+  selectedSquare: null,
+  legalMoves: [],       // [{from,to,san,promotion?}]
+  guesses: [],          // [{san, from, to}]
+  pairResults: [],      // [{rank, guessSan, engineSan, guessCp, engineCp, diff}]
+  topMoves: [],         // [{san, score, cpRaw, from, to}]
+  turnScore: null,      // score for current turn (higher=better)
+  turnScores: [],       // per-turn score history
+  bestTurn: null,       // highest single-turn score
+  explanation: null,
+  chatMessages: [], // [{role:'assistant',content:...},{role:'user',content:...},...]
+  moveHistory: [],      // [{num, white, black}]
+  lastMove: null,       // {from, to}
+  pendingPromotion: null, // {from, to, callback}
+  playerMove: null,     // {san, from, to} - the move the player actually made this turn
+  positionHistory: [],  // FEN after each ply: [0]=start, [1]=after ply 1, ...
+  lastMoveHistory: [],  // {from, to} for each ply
+  evalHistory: {},      // keyed by ply index, stores {topMoves, pairResults, turnScore, playerMove}
+  viewPly: null,        // null = live view, number = viewing that ply's position
+  clockSeconds: 600,    // total seconds remaining
+  clockMinutes: 10,     // configured time in minutes
+  reviewSeconds: 10,    // seconds to show eval before auto-advancing
+};
+
+// ============================================================
+// STOCKFISH ENGINE
+// ============================================================
+class Engine {
+  constructor() { this.worker = null; this.ready = false; }
+
+  async init() {
+    const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');
+    const code = await res.text();
+    const blob = new Blob([code], { type: 'application/javascript' });
+    this.worker = new Worker(URL.createObjectURL(blob));
+    return new Promise(resolve => {
+      const handler = e => {
+        const msg = typeof e.data === 'string' ? e.data : String(e.data);
+        if (msg === 'uciok') {
+          this.worker.removeEventListener('message', handler);
+          this.send('isready');
+          const h2 = e2 => {
+            const m2 = typeof e2.data === 'string' ? e2.data : String(e2.data);
+            if (m2 === 'readyok') {
+              this.worker.removeEventListener('message', h2);
+              this.ready = true;
+              resolve();
+            }
+          };
+          this.worker.addEventListener('message', h2);
+        }
+      };
+      this.worker.addEventListener('message', handler);
+      this.send('uci');
+    });
+  }
+
+  send(cmd) { this.worker.postMessage(cmd); }
+
+  analyze(fen, depth, multiPV) {
+    return new Promise(resolve => {
+      const infos = [];
+      const handler = e => {
+        const msg = typeof e.data === 'string' ? e.data : String(e.data);
+        if (msg.startsWith('info depth')) infos.push(msg);
+        if (msg.startsWith('bestmove')) {
+          this.worker.removeEventListener('message', handler);
+          resolve(this._parseLines(infos, multiPV));
+        }
+      };
+      this.worker.addEventListener('message', handler);
+      this.send('setoption name MultiPV value ' + multiPV);
+      this.send('position fen ' + fen);
+      this.send('go depth ' + depth);
+    });
+  }
+
+  bestMove(fen, depth) {
+    return new Promise(resolve => {
+      const handler = e => {
+        const msg = typeof e.data === 'string' ? e.data : String(e.data);
+        if (msg.startsWith('bestmove')) {
+          this.worker.removeEventListener('message', handler);
+          const uci = msg.split(' ')[1];
+          resolve(uci);
+        }
+      };
+      this.worker.addEventListener('message', handler);
+      this.send('setoption name MultiPV value 1');
+      this.send('position fen ' + fen);
+      this.send('go depth ' + depth);
+    });
+  }
+
+  _parseLines(lines, multiPV) {
+    const latest = {};
+    for (const line of lines) {
+      const p = this._parseLine(line);
+      if (p && p.multipv && p.uciMove) latest[p.multipv] = p;
+    }
+    const out = [];
+    for (let i = 1; i <= multiPV; i++) {
+      if (latest[i]) out.push(latest[i]);
+    }
+    return out;
+  }
+
+  _parseLine(line) {
+    const t = line.split(' ');
+    const d = {};
+    for (let i = 0; i < t.length; i++) {
+      if (t[i] === 'depth') d.depth = +t[i+1];
+      if (t[i] === 'multipv') d.multipv = +t[i+1];
+      if (t[i] === 'score') {
+        d.scoreType = t[i+1];
+        d.scoreVal = +t[i+2];
+      }
+      if (t[i] === 'pv') { d.uciMove = t[i+1]; break; }
+    }
+    return d;
+  }
+}
+
+const engine = new Engine();
+let _pendingBotMove = null; // pre-computed bot move promise
+let _pendingEval = null;    // pre-computed eval promise (runs while player thinks)
+
+// ============================================================
+// HELPERS
+// ============================================================
+function normSan(san) { return san.replace(/[+#]/g, ''); }
+
+function uciToSan(chess, uci) {
+  const from = uci.substring(0, 2);
+  const to = uci.substring(2, 4);
+  const promo = uci.length > 4 ? uci[4] : undefined;
+  const moves = chess.moves({ verbose: true });
+  const m = moves.find(mv => mv.from === from && mv.to === to && (!promo || mv.promotion === promo));
+  return m ? m.san : uci;
+}
+
+function evalToCp(scoreType, scoreVal) {
+  if (scoreType === 'mate') return scoreVal > 0 ? 100000 - scoreVal * 100 : -100000 - scoreVal * 100;
+  return scoreVal;
+}
+
+function formatCp(cp) {
+  if (Math.abs(cp) >= 99000) {
+    const mateIn = Math.round((100000 - Math.abs(cp)) / 100);
+    return (cp > 0 ? 'M+' : 'M-') + mateIn;
+  }
+  const v = cp / 100;
+  return (v >= 0 ? '+' : '') + v.toFixed(2);
+}
+
+function formatScore(type, val, forColor) {
+  const flip = forColor === 'b' ? -1 : 1;
+  if (type === 'mate') {
+    const v = val * flip;
+    return 'M' + (v > 0 ? '+' : '') + v;
+  }
+  const cp = (val * flip) / 100;
+  return (cp >= 0 ? '+' : '') + cp.toFixed(2);
+}
+
+function rc2sq(r, c) {
+  const rank = S.flipped ? r + 1 : 8 - r;
+  const file = S.flipped ? 7 - c : c;
+  return String.fromCharCode(97 + file) + rank;
+}
+
+function sq2rc(sq) {
+  const file = sq.charCodeAt(0) - 97;
+  const rank = +sq[1];
+  const r = S.flipped ? rank - 1 : 8 - rank;
+  const c = S.flipped ? 7 - file : file;
+  return [r, c];
+}
+
+function isPlayerTurn() { return S.chess.turn() === S.playerColor; }
+
+function plyCount() { return S.chess.history().length; }
+
+// ============================================================
+// VIEW & ARROW RENDERING
+// ============================================================
+let _waitingTimer = null;
+let _waitingPaused = false;
+let _waitingRemaining = 0;
+let _waitingBarStart = 0;
+
+function getViewChess() {
+  if (S.viewPly === null) return S.chess;
+  const fen = S.positionHistory[S.viewPly];
+  return fen ? new Chess(fen) : S.chess;
+}
+
+function startWaitingTimer() {
+  clearWaitingTimer();
+  const dur = S.reviewSeconds * 1000;
+  _waitingPaused = false;
+  _waitingRemaining = dur;
+  _waitingBarStart = Date.now();
+  const wrap = document.getElementById('timer-bar-wrap');
+  const bar = document.getElementById('timer-bar');
+  wrap.classList.add('active');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  void bar.offsetWidth;
+  bar.style.transition = `width ${S.reviewSeconds}s linear`;
+  bar.style.width = '100%';
+  _waitingTimer = setTimeout(() => advanceFromWaiting(), dur);
+  updateTimerHint();
+}
+
+function pauseWaitingTimer() {
+  if (_waitingPaused || !_waitingTimer) return;
+  _waitingPaused = true;
+  clearTimeout(_waitingTimer);
+  _waitingTimer = null;
+  const elapsed = Date.now() - _waitingBarStart;
+  _waitingRemaining = Math.max(0, _waitingRemaining - elapsed);
+  const bar = document.getElementById('timer-bar');
+  const dur = S.reviewSeconds * 1000;
+  const pct = ((dur - _waitingRemaining) / dur) * 100;
+  bar.style.transition = 'none';
+  bar.style.width = pct + '%';
+  updateTimerHint();
+}
+
+function resumeWaitingTimer() {
+  if (!_waitingPaused || _waitingRemaining <= 0) return;
+  _waitingPaused = false;
+  _waitingBarStart = Date.now();
+  const bar = document.getElementById('timer-bar');
+  void bar.offsetWidth;
+  bar.style.transition = `width ${_waitingRemaining / 1000}s linear`;
+  bar.style.width = '100%';
+  _waitingTimer = setTimeout(() => advanceFromWaiting(), _waitingRemaining);
+}
+
+function clearWaitingTimer() {
+  if (_waitingTimer) { clearTimeout(_waitingTimer); _waitingTimer = null; }
+  _waitingPaused = false;
+  _waitingRemaining = 0;
+  const wrap = document.getElementById('timer-bar-wrap');
+  const bar = document.getElementById('timer-bar');
+  if (wrap) wrap.classList.remove('active');
+  if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+  updateTimerHint();
+}
+
+function updateTimerHint() {
+  const el = document.getElementById('timer-hint');
+  if (!el) return;
+  if (S.phase === 'waiting' && _waitingPaused) {
+    el.textContent = 'Paused — space to continue';
+    el.classList.add('active');
+  } else if (S.phase === 'waiting' && _waitingTimer) {
+    el.textContent = 'Enter to skip · space to pause';
+    el.classList.add('active');
+  } else {
+    el.textContent = '';
+    el.classList.remove('active');
+  }
+}
+
+function advanceFromWaiting() {
+  if (S.phase !== 'waiting') return;
+  clearWaitingTimer();
+  S.pairResults = [];
+  S.topMoves = [];
+  S.playerMove = null;
+  S.explanation = null; S.chatMessages = [];
+  S.phase = 'bot-thinking';
+  updateUI();
+  renderBoard();
+  botPlay();
+}
+
+// ============================================================
+// GAME CLOCK
+// ============================================================
+let _clockInterval = null;
+
+function isClockRunning() {
+  const playerPhases = ['playing', 'guessing'];
+  return playerPhases.includes(S.phase) && S.viewPly === null;
+}
+
+function startClock() {
+  stopClock();
+  _clockInterval = setInterval(() => {
+    if (!isClockRunning()) return;
+    S.clockSeconds--;
+    updateClockDisplay();
+    if (S.clockSeconds <= 0) {
+      S.clockSeconds = 0;
+      stopClock();
+      S.phase = 'game-over';
+      updateUI();
+      renderBoard();
+    }
+  }, 1000);
+}
+
+function stopClock() {
+  if (_clockInterval) { clearInterval(_clockInterval); _clockInterval = null; }
+}
+
+function updateClockDisplay() {
+  const el = document.getElementById('clock-display');
+  const clockEl = document.getElementById('clock');
+  if (!el) return;
+  const mins = Math.floor(S.clockSeconds / 60);
+  const secs = S.clockSeconds % 60;
+  el.textContent = mins + ':' + String(secs).padStart(2, '0');
+  clockEl.classList.toggle('paused', !isClockRunning());
+  clockEl.classList.toggle('low', S.clockSeconds <= 60);
+}
+
+function navigateToPly(ply) {
+  if (ply < 0 || ply >= S.positionHistory.length) return;
+  if (ply >= S.positionHistory.length - 1) {
+    S.viewPly = null;
+  } else {
+    S.viewPly = ply;
+  }
+  updateUI();
+  renderBoard();
+}
+
+function renderArrows() {
+  const svg = document.getElementById('board-arrows');
+  if (!svg) return;
+  svg.innerHTML = '';
+
+  let topMoves, playerMove;
+  if (S.viewPly !== null && S.evalHistory[S.viewPly]) {
+    topMoves = S.evalHistory[S.viewPly].topMoves;
+    playerMove = S.evalHistory[S.viewPly].playerMove;
+  } else if (S.phase === 'waiting' || S.phase === 'results') {
+    topMoves = S.topMoves;
+    playerMove = S.playerMove;
+  } else {
+    return;
+  }
+  if (!topMoves || topMoves.length === 0) return;
+
+  const bEl = document.getElementById('board');
+  const sqSize = bEl.offsetWidth / 8;
+  const boardW = bEl.offsetWidth;
+  svg.setAttribute('viewBox', `0 0 ${boardW} ${boardW}`);
+
+  function sqToPixel(sq) {
+    const [r, c] = sq2rc(sq);
+    return { x: (c + 0.5) * sqSize, y: (r + 0.5) * sqSize };
+  }
+
+  // Arrow styles: best = blue, others = green. Shaft width as fraction of square size.
+  const bestStyle   = { color: 'rgba(56,132,244,0.9)',  w: 0.22 };
+  const otherStyles = [
+    { color: 'rgba(0,150,60,0.55)', w: 0.16 },
+    { color: 'rgba(0,130,60,0.35)', w: 0.12 },
+  ];
+  const movesToDraw = Math.min(topMoves.length, 3);
+
+  // Check if player's move is among the top engine moves
+  const playerInTop = playerMove && topMoves.slice(0, movesToDraw).some(
+    mv => normSan(mv.san) === normSan(playerMove.san)
+  );
+
+  // Draw engine arrows (worst first so best renders on top)
+  for (let i = movesToDraw - 1; i >= 0; i--) {
+    const mv = topMoves[i];
+    if (!mv.from || !mv.to) continue;
+    // Skip if this is the player's move (we'll draw it separately if it's in top)
+    if (playerMove && normSan(mv.san) === normSan(playerMove.san)) continue;
+    const s = i === 0 ? bestStyle : otherStyles[Math.min(i - 1, otherStyles.length - 1)];
+    drawArrow(svg, sqToPixel(mv.from), sqToPixel(mv.to), s.color, s.w * sqSize);
+  }
+
+  // Draw player's move only if it's among the top engine moves
+  if (playerInTop && playerMove && playerMove.from && playerMove.to) {
+    // Use best style (blue) if player played the #1 move, otherwise green
+    const isBest = normSan(topMoves[0].san) === normSan(playerMove.san);
+    const s = isBest ? bestStyle : otherStyles[0];
+    drawArrow(svg, sqToPixel(playerMove.from), sqToPixel(playerMove.to), s.color, s.w * sqSize);
+  }
+}
+
+function drawArrow(svg, from, to, color, shaftW) {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+
+  // Unit vector along arrow
+  const ux = dx / len, uy = dy / len;
+  // Perpendicular
+  const px = -uy, py = ux;
+
+  const headLen = shaftW * 2.8;   // arrowhead length
+  const headW = shaftW * 1.8;     // arrowhead half-width
+  const halfShaft = shaftW / 2;
+
+  // Shorten: start a bit from center, end a bit before target center
+  const startOff = shaftW * 0.5;
+  const endOff = shaftW * 0.3;
+  const sx = from.x + ux * startOff, sy = from.y + uy * startOff;
+  const ex = to.x - ux * endOff, ey = to.y - uy * endOff;
+
+  // Shaft end is where the head base starts
+  const shaftEndX = ex - ux * headLen, shaftEndY = ey - uy * headLen;
+
+  const d = [
+    `M${sx + px * halfShaft},${sy + py * halfShaft}`,
+    `L${shaftEndX + px * halfShaft},${shaftEndY + py * halfShaft}`,
+    `L${shaftEndX + px * headW},${shaftEndY + py * headW}`,
+    `L${ex},${ey}`,
+    `L${shaftEndX - px * headW},${shaftEndY - py * headW}`,
+    `L${shaftEndX - px * halfShaft},${shaftEndY - py * halfShaft}`,
+    `L${sx - px * halfShaft},${sy - py * halfShaft}`,
+    'Z',
+  ].join(' ');
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', color);
+  svg.appendChild(path);
+}
+
+// ============================================================
+// BOARD RENDERING
+// ============================================================
+const boardEl = document.getElementById('board');
+
+function renderBoard() {
+  const chess = getViewChess();
+  const boardWrap = document.getElementById('board-wrap');
+  boardWrap.classList.toggle('review-mode', S.viewPly !== null);
+  boardEl.innerHTML = '';
+  const guessSquares = S.guesses.map(g => g.to);
+  const inCheck = chess.in_check();
+  let kingSquare = null;
+  if (inCheck) {
+    const turn = chess.turn();
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const sq = rc2sq(r, c);
+        const p = chess.get(sq);
+        if (p && p.type === 'k' && p.color === turn) kingSquare = sq;
+      }
+    }
+  }
+
+  // Determine last-move highlight for current view
+  const lastMove = S.viewPly !== null
+    ? (S.viewPly > 0 ? S.lastMoveHistory[S.viewPly - 1] : null)
+    : S.lastMove;
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq = rc2sq(r, c);
+      const piece = chess.get(sq);
+      const isLight = (r + c) % 2 === 0;
+      const div = document.createElement('div');
+      div.className = 'square ' + (isLight ? 'light' : 'dark');
+      div.dataset.sq = sq;
+
+      if (sq === S.selectedSquare) {
+        div.classList.add('selected');
+      } else if (guessSquares.includes(sq) && (S.phase === 'guessing' || S.phase === 'results')) {
+        div.classList.add('guess-hl');
+      } else if (lastMove && (sq === lastMove.from || sq === lastMove.to)) {
+        div.classList.add('last-move');
+      }
+
+      if (sq === kingSquare) div.classList.add('check');
+
+      if (piece) {
+        const img = document.createElement('img');
+        const key = piece.color + piece.type.toUpperCase();
+        img.src = PIECE_IMG[key];
+        img.alt = key;
+        div.appendChild(img);
+      }
+
+      if (S.selectedSquare) {
+        const legal = S.legalMoves.find(m => m.to === sq);
+        if (legal) {
+          const dot = document.createElement('div');
+          dot.className = 'legal-dot ' + (piece ? 'capture' : 'move');
+          div.appendChild(dot);
+        }
+      }
+
+      if (c === 0) {
+        const coord = document.createElement('span');
+        coord.className = 'coord coord-rank';
+        coord.textContent = S.flipped ? r + 1 : 8 - r;
+        div.appendChild(coord);
+      }
+      if (r === 7) {
+        const coord = document.createElement('span');
+        coord.className = 'coord coord-file';
+        coord.textContent = String.fromCharCode(S.flipped ? 104 - c : 97 + c);
+        div.appendChild(coord);
+      }
+
+      div.addEventListener('click', () => onSquareClick(sq));
+      boardEl.appendChild(div);
+    }
+  }
+  renderArrows();
+}
+
+// ============================================================
+// BOARD INTERACTION
+// ============================================================
+function onSquareClick(sq) {
+  if (S.viewPly !== null) return;
+  if (S.phase === 'evaluating' || S.phase === 'bot-thinking' || S.phase === 'setup' || S.phase === 'game-over' || S.phase === 'waiting') return;
+
+  // If in results phase, clicking a piece transitions to playing
+  if (S.phase === 'results') {
+    const piece = S.chess.get(sq);
+    if (piece && piece.color === S.playerColor) {
+      S.phase = 'playing';
+      selectPiece(sq);
+      updateUI();
+      return;
+    }
+    return;
+  }
+
+  // If a piece is selected and clicking a legal target
+  if (S.selectedSquare) {
+    const legal = S.legalMoves.find(m => m.to === sq);
+    if (legal) {
+      // Check promotion
+      const piece = S.chess.get(S.selectedSquare);
+      if (piece && piece.type === 'p' && (sq[1] === '8' || sq[1] === '1')) {
+        showPromotion(S.selectedSquare, sq, (promo) => {
+          const promoMove = S.legalMoves.find(m => m.to === sq && m.promotion === promo);
+          if (promoMove) handleTarget(promoMove);
+        });
+        return;
+      }
+      handleTarget(legal);
+      return;
+    }
+    // King selected + click own rook → castle
+    const selPiece = S.chess.get(S.selectedSquare);
+    if (selPiece && selPiece.type === 'k') {
+      const rank = S.playerColor === 'w' ? '1' : '8';
+      const castleMap = { ['h' + rank]: 'g' + rank, ['a' + rank]: 'c' + rank };
+      if (castleMap[sq]) {
+        const castleMove = S.legalMoves.find(m => m.to === castleMap[sq]);
+        if (castleMove) { handleTarget(castleMove); return; }
+      }
+    }
+    // Clicking the same piece → deselect; another own piece → reselect
+    const piece2 = S.chess.get(sq);
+    if (piece2 && piece2.color === S.playerColor) {
+      if (sq === S.selectedSquare) {
+        deselectPiece();
+      } else {
+        selectPiece(sq);
+      }
+      renderBoard();
+      return;
+    }
+    // Click empty/opponent square that's not legal → deselect
+    deselectPiece();
+    renderBoard();
+    return;
+  }
+
+  // No piece selected → select if it's player's piece and it's their turn/guessing
+  const piece = S.chess.get(sq);
+  if (piece && piece.color === S.playerColor) {
+    if (S.phase === 'guessing' || ((S.phase === 'playing') && isPlayerTurn())) {
+      selectPiece(sq);
+      renderBoard();
+    }
+  }
+}
+
+function selectPiece(sq) {
+  S.selectedSquare = sq;
+  S.legalMoves = S.chess.moves({ square: sq, verbose: true });
+}
+
+function deselectPiece() {
+  S.selectedSquare = null;
+  S.legalMoves = [];
+}
+
+function handleTarget(moveObj) {
+  if (S.phase === 'guessing') {
+    addGuess(moveObj);
+  } else if (S.phase === 'playing') {
+    executeMove(moveObj);
+  }
+  deselectPiece();
+}
+
+// ============================================================
+// PROMOTION MODAL
+// ============================================================
+function showPromotion(from, to, callback) {
+  const modal = document.getElementById('promo-modal');
+  const opts = document.getElementById('promo-options');
+  opts.innerHTML = '';
+  const pieces = ['q', 'r', 'b', 'n'];
+  const names = { q: 'Q', r: 'R', b: 'B', n: 'N' };
+  pieces.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'promo-option';
+    const img = document.createElement('img');
+    img.src = PIECE_IMG[S.playerColor + names[p]];
+    div.appendChild(img);
+    div.addEventListener('click', () => {
+      modal.classList.remove('active');
+      callback(p);
+    });
+    opts.appendChild(div);
+  });
+  modal.classList.add('active');
+}
+
+// ============================================================
+// GUESS MANAGEMENT
+// ============================================================
+function addGuess(moveObj) {
+  const san = moveObj.san;
+  // Reject duplicates (normalized)
+  if (S.guesses.some(g => normSan(g.san) === normSan(san))) return;
+  S.guesses.push({ san, from: moveObj.from, to: moveObj.to });
+  updateUI();
+  renderBoard();
+}
+
+function removeGuess(idx) {
+  S.guesses.splice(idx, 1);
+  updateUI();
+  renderBoard();
+}
+
+async function evaluateGuesses() {
+  S.phase = 'evaluating';
+  updateUI();
+
+  // Analyze enough lines to cover guesses + some extras
+  const multiPV = Math.max(S.guesses.length * 2, 6);
+  const results = await engine.analyze(S.chess.fen(), 15, multiPV);
+
+  // Convert to SAN with raw cp values
+  S.topMoves = results.map(r => {
+    const cpRaw = evalToCp(r.scoreType, r.scoreVal);
+    return {
+      san: uciToSan(S.chess, r.uciMove),
+      score: formatScore(r.scoreType, r.scoreVal, S.chess.turn()),
+      cpRaw,
+      from: r.uciMove.substring(0, 2),
+      to: r.uciMove.substring(2, 4),
+    };
+  });
+
+  // Find cp value for each guess by matching against engine output
+  const guessesWithEval = S.guesses.map(g => {
+    const engineMatch = S.topMoves.find(m => normSan(m.san) === normSan(g.san));
+    return { san: g.san, cpRaw: engineMatch ? engineMatch.cpRaw : -99999 };
+  });
+
+  // Sort guesses by eval (best first = highest cp, since evals are from side-to-move perspective)
+  guessesWithEval.sort((a, b) => b.cpRaw - a.cpRaw);
+
+  // Pair rank-by-rank: user's #i guess vs engine's #i move
+  S.pairResults = [];
+  let cpSum = 0;
+  for (let i = 0; i < guessesWithEval.length; i++) {
+    const engineMove = S.topMoves[i]; // engine's i-th best
+    const guess = guessesWithEval[i]; // user's i-th best guess
+    const diff = Math.abs(engineMove.cpRaw - guess.cpRaw);
+    S.pairResults.push({
+      rank: i + 1,
+      guessSan: guess.san,
+      engineSan: engineMove.san,
+      guessCp: guess.cpRaw,
+      engineCp: engineMove.cpRaw,
+      diff,
+    });
+    cpSum += diff;
+  }
+
+  const meanCp = guessesWithEval.length > 0 ? cpSum / guessesWithEval.length : 0;
+  S.turnScore = Math.round(100 / (1 + meanCp / 100) * 100) / 100;
+  S.turnScores.push(S.turnScore);
+  if (S.bestTurn === null || S.turnScore > S.bestTurn) S.bestTurn = S.turnScore;
+
+  S.phase = 'results';
+  updateUI();
+  renderBoard();
+}
+
+// ============================================================
+// SIMPLE MODE EVALUATION
+// ============================================================
+async function evaluateSimpleMove(preFen, moveSan, moveFrom, moveTo) {
+  // Use pre-computed eval if available, otherwise compute now
+  let results;
+  if (_pendingEval) {
+    results = await _pendingEval;
+    _pendingEval = null;
+  } else {
+    results = await engine.analyze(preFen, 15, 6);
+  }
+
+  // Build top moves list from the pre-move position
+  const tmpChess = new Chess(preFen);
+  S.topMoves = results.map(r => {
+    const cpRaw = evalToCp(r.scoreType, r.scoreVal);
+    return {
+      san: uciToSan(tmpChess, r.uciMove),
+      score: formatScore(r.scoreType, r.scoreVal, tmpChess.turn()),
+      cpRaw,
+      from: r.uciMove.substring(0, 2),
+      to: r.uciMove.substring(2, 4),
+    };
+  });
+
+  // The player's move is their single "guess"
+  const playerMoveData = S.topMoves.find(m => normSan(m.san) === normSan(moveSan));
+  const bestCp = S.topMoves.length > 0 ? S.topMoves[0].cpRaw : 0;
+
+  let playerCp;
+  if (playerMoveData) {
+    playerCp = playerMoveData.cpRaw;
+  } else {
+    // Move not in top 8 — compute its actual eval by analyzing the resulting position
+    const postChess = new Chess(preFen);
+    postChess.move(moveSan);
+    const postResults = await engine.analyze(postChess.fen(), 15, 1);
+    if (postResults.length > 0) {
+      // Eval is from opponent's perspective, negate to get player's perspective
+      playerCp = -evalToCp(postResults[0].scoreType, postResults[0].scoreVal);
+    } else {
+      playerCp = bestCp - 500; // worst-case fallback
+    }
+  }
+
+  const diff = Math.abs(bestCp - playerCp);
+
+  S.pairResults = [{
+    rank: 1,
+    guessSan: moveSan,
+    engineSan: S.topMoves[0].san,
+    guessCp: playerCp,
+    engineCp: bestCp,
+    diff,
+  }];
+
+  S.turnScore = Math.round(100 / (1 + diff / 100) * 100) / 100;
+  S.turnScores.push(S.turnScore);
+  if (S.bestTurn === null || S.turnScore > S.bestTurn) S.bestTurn = S.turnScore;
+
+  // Track the player's actual move for arrow rendering
+  S.playerMove = { san: moveSan, from: moveFrom, to: moveTo };
+
+  // Save evaluation data for history navigation
+  const plyIdx = S.positionHistory.length - 1;
+  S.evalHistory[plyIdx] = {
+    topMoves: S.topMoves.map(m => ({...m})),
+    pairResults: S.pairResults.map(p => ({...p})),
+    turnScore: S.turnScore,
+    playerMove: { ...S.playerMove },
+  };
+
+  // Pre-compute bot's reply while user reviews
+  _pendingBotMove = engine.bestMove(S.chess.fen(), S.engineDepth);
+
+  S.phase = 'waiting'; // wait for timer or space to continue
+  updateUI();
+  renderBoard();
+  startWaitingTimer();
+}
+
+// ============================================================
+// GAME LOGIC
+// ============================================================
+async function startGame() {
+  const overlay = document.getElementById('loading-overlay');
+  overlay.classList.add('active');
+  try {
+    await engine.init();
+    engine.send('ucinewgame');
+  } catch (err) {
+    overlay.querySelector('div:last-child').textContent = 'Failed to load Stockfish. Please refresh.';
+    return;
+  }
+  overlay.classList.remove('active');
+
+  _pendingBotMove = null;
+  _pendingEval = null;
+  S.chess = new Chess();
+  S.flipped = S.playerColor === 'b';
+  S.moveHistory = [];
+  S.guesses = [];
+  S.pairResults = [];
+  S.topMoves = [];
+  S.turnScore = null;
+  S.turnScores = [];
+  S.bestTurn = null;
+  S.explanation = null; S.chatMessages = [];
+  S.lastMove = null;
+  S.selectedSquare = null;
+  S.legalMoves = [];
+  S.playerMove = null;
+  S.positionHistory = [S.chess.fen()];
+  S.lastMoveHistory = [];
+  S.evalHistory = {};
+  S.viewPly = null;
+  S.clockSeconds = S.clockMinutes * 60;
+
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('game').classList.add('active');
+  updateClockDisplay();
+  startClock();
+
+  if (S.playerColor === 'b') {
+    // Stockfish plays White's first move
+    S.phase = 'bot-thinking';
+    updateUI();
+    renderBoard();
+    await botPlay();
+  } else {
+    S.phase = 'playing';
+    // Pre-compute eval if past opening phase
+    if (S.gameMode === 'simple' && S.openingMoves === 0) {
+      _pendingEval = engine.analyze(S.chess.fen(), 15, 6);
+    }
+    updateUI();
+    renderBoard();
+  }
+}
+
+function executeMove(moveObj) {
+  // In simple mode, capture the FEN and move BEFORE executing
+  const preFen = S.gameMode === 'simple' ? S.chess.fen() : null;
+  const moveSan = moveObj.san;
+  const moveFrom = moveObj.from;
+  const moveTo = moveObj.to;
+
+  const result = S.chess.move(moveObj.san);
+  if (!result) return;
+  S.lastMove = { from: result.from, to: result.to };
+
+  // Record position and move for history navigation
+  S.positionHistory.push(S.chess.fen());
+  S.lastMoveHistory.push({ from: result.from, to: result.to });
+
+  recordMove(result);
+  deselectPiece();
+
+  if (S.chess.game_over()) {
+    S.phase = 'game-over';
+    updateUI();
+    renderBoard();
+    return;
+  }
+
+  // Simple mode: evaluate the move just played, then wait for timer
+  if (S.gameMode === 'simple' && plyCount() > S.openingMoves * 2) {
+    S.phase = 'evaluating';
+    updateUI();
+    renderBoard();
+    evaluateSimpleMove(preFen, moveSan, moveFrom, moveTo);
+    return;
+  }
+
+  S.phase = 'bot-thinking';
+  updateUI();
+  renderBoard();
+  botPlay();
+}
+
+async function botPlay() {
+  let uci;
+  if (_pendingBotMove) {
+    uci = await _pendingBotMove;
+    _pendingBotMove = null;
+  } else {
+    uci = await engine.bestMove(S.chess.fen(), S.engineDepth);
+  }
+  const from = uci.substring(0, 2);
+  const to = uci.substring(2, 4);
+  const promo = uci.length > 4 ? uci[4] : undefined;
+  const moveOpts = { from, to };
+  if (promo) moveOpts.promotion = promo;
+  const result = S.chess.move(moveOpts);
+  if (!result) {
+    // Fallback: try SAN
+    const san = uciToSan(S.chess, uci);
+    const r2 = S.chess.move(san);
+    if (r2) {
+      S.lastMove = { from: r2.from, to: r2.to };
+      S.positionHistory.push(S.chess.fen());
+      S.lastMoveHistory.push({ from: r2.from, to: r2.to });
+      recordMove(r2);
+    }
+  } else {
+    S.lastMove = { from: result.from, to: result.to };
+    S.positionHistory.push(S.chess.fen());
+    S.lastMoveHistory.push({ from: result.from, to: result.to });
+    recordMove(result);
+  }
+
+  if (S.chess.game_over()) {
+    S.phase = 'game-over';
+    updateUI();
+    renderBoard();
+    return;
+  }
+
+  // Decide next phase
+  if (plyCount() < S.openingMoves * 2 || S.gameMode === 'simple') {
+    S.phase = 'playing';
+    // Pre-compute eval while the player thinks (simple mode, past opening)
+    if (S.gameMode === 'simple' && plyCount() >= S.openingMoves * 2) {
+      _pendingEval = engine.analyze(S.chess.fen(), 15, 6);
+    }
+  } else {
+    S.phase = 'guessing';
+    S.guesses = [];
+    S.pairResults = [];
+    S.topMoves = [];
+    S.explanation = null; S.chatMessages = [];
+  }
+  updateUI();
+  renderBoard();
+}
+
+function recordMove(result) {
+  const history = S.chess.history();
+  const totalMoves = history.length;
+  const moveNum = Math.ceil(totalMoves / 2);
+
+  if (result.color === 'w') {
+    S.moveHistory.push({ num: moveNum, white: result.san, black: null });
+  } else {
+    if (S.moveHistory.length === 0 || S.moveHistory[S.moveHistory.length - 1].black !== null) {
+      S.moveHistory.push({ num: moveNum, white: '\u2026', black: result.san });
+    } else {
+      S.moveHistory[S.moveHistory.length - 1].black = result.san;
+    }
+  }
+}
+
+// ============================================================
+// CLAUDE API
+// ============================================================
+async function askClaude(followUp) {
+  // Stop the review timer so the user can read the explanation
+  if (S.phase === 'waiting') {
+    clearWaitingTimer();
+  }
+
+  const guesses = S.gameMode === 'simple' && S.playerMove
+    ? [S.playerMove.san]
+    : S.guesses.map(g => g.san);
+
+  // Build conversation history for follow-ups
+  if (followUp) {
+    S.chatMessages.push({ role: 'user', content: followUp });
+  }
+
+  // Show loading state
+  updateExplanation(true);
+
+  try {
+    const resp = await fetch('/api/explain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fen: S.chess.fen(),
+        guesses,
+        topMoves: S.topMoves,
+        playerColor: S.playerColor,
+        messages: S.chatMessages.length > 0 ? S.chatMessages : undefined,
+      }),
+    });
+    const data = await resp.json();
+    const reply = data.explanation || ('Error: ' + (data.error || 'Unknown error'));
+    S.chatMessages.push({ role: 'assistant', content: reply });
+    S.explanation = reply;
+  } catch (err) {
+    const reply = 'Failed to connect to the explanation service.';
+    S.chatMessages.push({ role: 'assistant', content: reply });
+    S.explanation = reply;
+  }
+  updateExplanation();
+}
+
+function sendFollowUp() {
+  const input = document.getElementById('coach-input');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  askClaude(text);
+}
+
+// ============================================================
+// UI UPDATES
+// ============================================================
+function updateUI() {
+  updateClockDisplay();
+  updateScoreBar();
+  updatePhaseBanner();
+  updateGuessSection();
+  updateActions();
+  updateExplanation();
+  updateHistory();
+}
+
+let _prevAvg = null;
+function updateScoreBar() {
+  const el = document.getElementById('score-bar');
+  if (S.phase === 'setup') { el.style.display = 'none'; _prevAvg = null; return; }
+  if (S.turnScores.length === 0 && S.phase !== 'results') { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const avg = S.turnScores.length > 0
+    ? S.turnScores.reduce((a, b) => a + b, 0) / S.turnScores.length : 0;
+  const avgEl = document.getElementById('score-avg');
+  const bestEl = document.getElementById('score-best');
+
+  // Animate if avg changed
+  if (_prevAvg !== null && avg !== _prevAvg) {
+    avgEl.classList.remove('score-pop', 'score-up', 'score-down');
+    void avgEl.offsetWidth; // reflow to restart animation
+    avgEl.classList.add('score-pop');
+    avgEl.classList.add(avg >= _prevAvg ? 'score-up' : 'score-down');
+
+    // Floating score indicator
+    const existing = el.querySelector('.score-float');
+    if (existing) existing.remove();
+    const floater = document.createElement('span');
+    floater.className = 'score-float';
+    const delta = avg - _prevAvg;
+    floater.style.color = delta >= 0 ? 'var(--accent)' : 'var(--miss)';
+    floater.textContent = (delta >= 0 ? '+' : '') + delta.toFixed(1);
+    el.appendChild(floater);
+    setTimeout(() => floater.remove(), 1300);
+  }
+  _prevAvg = avg;
+
+  avgEl.textContent = avg.toFixed(1);
+  bestEl.textContent = S.bestTurn !== null ? S.bestTurn.toFixed(1) : '-';
+  document.getElementById('score-turns').textContent = S.turnScores.length;
+}
+
+function updatePhaseBanner() {
+  const el = document.getElementById('phase-banner');
+
+  // History review mode
+  if (S.viewPly !== null) {
+    const plyNum = S.viewPly;
+    const moveNum = Math.ceil(plyNum / 2) || 0;
+    const evalData = S.evalHistory[S.viewPly];
+    let title = 'Review';
+    let desc = `Position after move ${moveNum}`;
+    if (evalData) {
+      const tc = evalData.turnScore >= 80 ? 'var(--accent)' : evalData.turnScore >= 50 ? '#e2b53a' : 'var(--miss)';
+      desc += `<br><span style="font-size:16px;font-weight:700;color:${tc}">${evalData.turnScore.toFixed(1)}</span> <span style="color:var(--text)">/ 100</span>`;
+    }
+    desc += '<br><span style="font-size:12px;color:var(--text)">&larr; &rarr; navigate &middot; Esc to return</span>';
+    el.innerHTML = `<h2>${title}</h2><p>${desc}</p>`;
+    return;
+  }
+
+  const isOpening = plyCount() < S.openingMoves * 2;
+  let title = '', desc = '', badge = '';
+
+  switch (S.phase) {
+    case 'playing':
+      title = 'Your Move';
+      desc = 'Play your move.';
+      if (isOpening && S.openingMoves > 0) badge = `<div class="badge">Opening — eval starts move ${S.openingMoves + 1}</div>`;
+      break;
+    case 'guessing':
+      title = 'Guess Phase';
+      desc = `Guess candidate moves for ${S.playerColor === 'w' ? 'White' : 'Black'}. (${S.guesses.length} so far)`;
+      break;
+    case 'evaluating':
+      title = 'Evaluating';
+      desc = '<span class="spinner"></span>Stockfish analyzing\u2026';
+      break;
+    case 'results': {
+      title = 'Results';
+      desc = `Score: ${S.turnScore.toFixed(1)} / 100. Review, then play.`;
+      break;
+    }
+    case 'waiting': {
+      const turnColor = S.turnScore >= 80 ? 'var(--accent)' : S.turnScore >= 50 ? '#e2b53a' : 'var(--miss)';
+      title = `<span class="turn-score-reveal" style="color:${turnColor}">${S.turnScore.toFixed(1)}</span><span style="font-size:14px;color:var(--text)"> / 100</span>`;
+      desc = '';
+      break;
+    }
+    case 'bot-thinking':
+      title = 'Opponent';
+      desc = '<span class="spinner"></span>Stockfish thinking\u2026';
+      break;
+    case 'game-over': {
+      title = 'Game Over';
+      stopClock();
+      if (S.clockSeconds <= 0) desc = 'Time\'s up!';
+      else if (S.chess.in_checkmate()) {
+        const winner = S.chess.turn() === 'w' ? 'Black' : 'White';
+        desc = `Checkmate! ${winner} wins.`;
+      } else if (S.chess.in_stalemate()) desc = 'Stalemate.';
+      else if (S.chess.in_draw()) desc = 'Draw.';
+      else desc = 'Game ended.';
+      break;
+    }
+  }
+  el.innerHTML = `<h2>${title}</h2><p>${desc}</p>${badge}`;
+}
+
+function renderEvalTable(pairResults, topMoves) {
+  let html = '<table class="compare-table"><thead><tr><th>You</th><th>Best</th><th class="col-diff">Gap</th></tr></thead><tbody>';
+  pairResults.forEach(p => {
+    const diffColor = p.diff <= 10 ? 'var(--match)' : p.diff <= 50 ? '#e2b53a' : p.diff <= 150 ? '#e08c3a' : 'var(--miss)';
+    const sameMove = normSan(p.guessSan) === normSan(p.engineSan);
+    html += `<tr>
+      <td class="col-move">${p.guessSan} <span class="col-eval">${formatCp(p.guessCp)}</span></td>
+      <td class="col-move">${p.engineSan} <span class="col-eval">${formatCp(p.engineCp)}</span></td>
+      <td class="col-diff" style="color:${diffColor}">${sameMove ? '=' : p.diff + 'cp'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+
+  if (topMoves && topMoves.length > 1) {
+    const alts = topMoves.slice(0, 5);
+    html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">';
+    alts.forEach((m, i) => {
+      html += `<div class="top-move"><span class="rank">${i + 1}.</span><span class="move-san">${m.san}</span><span class="eval">${m.score}</span></div>`;
+    });
+    html += '</div>';
+  }
+  return html;
+}
+
+function updateGuessSection() {
+  const el = document.getElementById('guess-section');
+
+  // History review mode
+  if (S.viewPly !== null) {
+    const evalData = S.evalHistory[S.viewPly];
+    if (evalData && evalData.pairResults.length > 0) {
+      el.style.display = '';
+      el.innerHTML = renderEvalTable(evalData.pairResults, evalData.topMoves);
+      return;
+    }
+    el.style.display = 'none';
+    return;
+  }
+
+  const showResults = S.pairResults.length > 0 && S.phase !== 'guessing';
+  if (S.phase !== 'guessing' && !showResults) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  if (S.phase === 'guessing') {
+    let html = '<div class="section-title">Your Guesses</div>';
+    S.guesses.forEach((g, i) => {
+      html += `<div class="guess-item"><span class="san">${g.san}</span><button class="remove-guess" onclick="removeGuess(${i})">&times;</button></div>`;
+    });
+    if (S.guesses.length === 0) {
+      html += '<div style="padding:8px 10px;font-size:13px;color:var(--text)">Click pieces to guess moves</div>';
+    }
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = renderEvalTable(S.pairResults, S.topMoves);
+  }
+}
+
+function updateActions() {
+  const el = document.getElementById('actions');
+  let html = '';
+  if (S.viewPly !== null) { el.innerHTML = ''; return; }
+  if (S.phase === 'guessing') {
+    const ready = S.guesses.length >= 1;
+    html = `<button class="btn btn-primary" ${ready ? '' : 'disabled'} onclick="evaluateGuesses()">Evaluate</button>`;
+  } else if (S.phase === 'results' || S.phase === 'waiting') {
+    if (S.chatMessages.length === 0) {
+      html = `<button class="btn btn-secondary" id="btn-explain" onclick="askClaude()">Explanation (2¢)</button>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function updateExplanation(loading) {
+  const el = document.getElementById('explanation-section');
+  if (!S.explanation && !loading && S.chatMessages.length === 0) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  let html = '<div class="section-title">Coach</div>';
+  // Render conversation (skip user messages that are follow-ups only, assistant messages are responses)
+  for (const msg of S.chatMessages) {
+    if (msg.role === 'user') {
+      html += `<p style="color:var(--accent);font-size:13px;margin-top:6px"><strong>You:</strong> ${msg.content}</p>`;
+    } else {
+      html += `<p>${msg.content}</p>`;
+    }
+  }
+  if (loading) {
+    html += '<p><span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:6px;vertical-align:middle"></span>Thinking...</p>';
+  }
+  // Follow-up input
+  if (S.chatMessages.length > 0 && !loading) {
+    html += `<div style="display:flex;gap:6px;margin-top:8px"><input type="text" id="coach-input" placeholder="Ask a follow-up..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-bright);font-family:'DM Sans',sans-serif;font-size:13px;outline:none" onkeydown="if(event.code==='Enter'){event.preventDefault();sendFollowUp()}"><button class="btn btn-secondary" onclick="sendFollowUp()" style="padding:8px 12px;font-size:13px;white-space:nowrap">Send</button></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function updateHistory() {
+  const el = document.getElementById('history-list');
+  let html = '';
+  S.moveHistory.forEach(m => {
+    // Compute ply indices for navigation
+    const whitePly = m.white && m.white !== '\u2026' ? (m.num - 1) * 2 + 1 : null;
+    const blackPly = m.black ? m.num * 2 : null;
+    const whiteActive = S.viewPly !== null && whitePly === S.viewPly;
+    const blackActive = S.viewPly !== null && blackPly === S.viewPly;
+    const wHL = whiteActive ? 'background:rgba(127,186,44,0.25);border-radius:3px;padding:1px 4px;' : '';
+    const bHL = blackActive ? 'background:rgba(127,186,44,0.25);border-radius:3px;padding:1px 4px;' : '';
+    const wClick = whitePly !== null ? ` onclick="navigateToPly(${whitePly})" style="cursor:pointer;${wHL}"` : '';
+    const bClick = blackPly !== null ? ` onclick="navigateToPly(${blackPly})" style="cursor:pointer;${bHL}"` : '';
+
+    // Show best move in parentheses next to player's moves
+    const whiteBest = whitePly !== null && S.evalHistory[whitePly] ? S.evalHistory[whitePly].pairResults[0] : null;
+    const blackBest = blackPly !== null && S.evalHistory[blackPly] ? S.evalHistory[blackPly].pairResults[0] : null;
+    const wBestHint = whiteBest && normSan(whiteBest.guessSan) !== normSan(whiteBest.engineSan)
+      ? ` <span style="color:var(--text);font-size:11px">(${whiteBest.engineSan})</span>` : '';
+    const bBestHint = blackBest && normSan(blackBest.guessSan) !== normSan(blackBest.engineSan)
+      ? ` <span style="color:var(--text);font-size:11px">(${blackBest.engineSan})</span>` : '';
+
+    html += `<div class="move-row"><span class="move-num">${m.num}.</span><span class="move-white"><span${wClick}>${m.white || ''}${wBestHint}</span></span><span class="move-black"><span${bClick}>${m.black || ''}${bBestHint}</span></span></div>`;
+  });
+  el.innerHTML = html;
+  if (S.viewPly !== null) {
+    const highlighted = el.querySelector('[style*="background"]');
+    if (highlighted) highlighted.scrollIntoView({ block: 'nearest' });
+  } else {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+function transitionToPlaying() {
+  S.phase = 'playing';
+  updateUI();
+  renderBoard();
+}
+
+function newGame() {
+  clearWaitingTimer();
+  stopClock();
+  S.phase = 'setup';
+  S.viewPly = null;
+  document.getElementById('game').classList.remove('active');
+  document.getElementById('setup').style.display = 'flex';
+  document.getElementById('explanation-section').style.display = 'none';
+  document.getElementById('guess-section').style.display = 'none';
+}
+
+// ============================================================
+// SETUP EVENT HANDLERS
+// ============================================================
+document.querySelectorAll('#mode-group button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#mode-group button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    S.gameMode = btn.dataset.mode;
+  });
+});
+
+document.querySelectorAll('#color-group button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#color-group button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    S.playerColor = btn.dataset.color;
+  });
+});
+
+document.getElementById('opening-slider').addEventListener('input', e => {
+  S.openingMoves = +e.target.value;
+  document.getElementById('opening-val').textContent = e.target.value;
+});
+
+document.getElementById('depth-slider').addEventListener('input', e => {
+  S.engineDepth = +e.target.value;
+  document.getElementById('depth-val').textContent = e.target.value;
+});
+
+document.getElementById('time-slider').addEventListener('input', e => {
+  S.clockMinutes = +e.target.value;
+  document.getElementById('time-val').textContent = e.target.value;
+});
+
+document.getElementById('review-slider').addEventListener('input', e => {
+  S.reviewSeconds = +e.target.value;
+  document.getElementById('review-val').textContent = e.target.value;
+});
+
+// Password gate
+if (localStorage.getItem('chess-trainer-auth') === 'ok') {
+  document.getElementById('password-gate').style.display = 'none';
+  document.getElementById('setup').style.display = '';
+} else {
+  document.getElementById('pw-input').addEventListener('keydown', e => {
+    if (e.code === 'Enter') {
+      if (e.target.value === 'saulbeatschris') {
+        localStorage.setItem('chess-trainer-auth', 'ok');
+        document.getElementById('password-gate').style.display = 'none';
+        document.getElementById('setup').style.display = '';
+      } else {
+        document.getElementById('pw-error').textContent = 'Wrong password';
+        e.target.value = '';
+      }
+    }
+  });
+  document.getElementById('pw-input').focus();
+}
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+// Keyboard: space (advance), arrows (history), escape (exit review)
+document.addEventListener('keydown', e => {
+  // Enter/Return in waiting: skip timer and move on immediately
+  if (e.code === 'Enter' && S.phase === 'waiting' && S.viewPly === null) {
+    e.preventDefault();
+    advanceFromWaiting();
+    return;
+  }
+  // Space in waiting: pause (first press), then advance (second press)
+  if (e.code === 'Space' && S.phase === 'waiting' && S.viewPly === null) {
+    e.preventDefault();
+    if (!_waitingPaused) {
+      pauseWaitingTimer();
+      updatePhaseBanner();
+      updateTimerHint();
+    } else {
+      advanceFromWaiting();
+    }
+    return;
+  }
+  // Left arrow: go back one ply
+  if (e.code === 'ArrowLeft' && S.positionHistory.length > 1) {
+    e.preventDefault();
+    if (S.viewPly === null) {
+      S.viewPly = S.positionHistory.length - 1;
+    }
+    if (S.viewPly > 0) S.viewPly--;
+    updateUI();
+    renderBoard();
+    return;
+  }
+  // Right arrow: go forward one ply
+  if (e.code === 'ArrowRight' && S.viewPly !== null) {
+    e.preventDefault();
+    S.viewPly++;
+    if (S.viewPly >= S.positionHistory.length - 1) S.viewPly = null;
+    updateUI();
+    renderBoard();
+    return;
+  }
+  // Escape: exit review mode
+  if (e.code === 'Escape' && S.viewPly !== null) {
+    e.preventDefault();
+    S.viewPly = null;
+    updateUI();
+    renderBoard();
+    return;
+  }
+});
+
+// Tooltip: click to toggle on mobile, dismiss on outside click
+document.addEventListener('click', e => {
+  const icon = e.target.closest('.tooltip-icon');
+  if (icon) {
+    e.stopPropagation();
+    const content = icon.parentElement.querySelector('.tooltip-content');
+    const wasOpen = content.classList.contains('open');
+    // Close all tooltips first
+    document.querySelectorAll('.tooltip-content.open').forEach(el => el.classList.remove('open'));
+    if (!wasOpen) content.classList.add('open');
+    return;
+  }
+  // Click outside closes all tooltips
+  document.querySelectorAll('.tooltip-content.open').forEach(el => el.classList.remove('open'));
+});
+
+// Resize: redraw arrows to match new board dimensions
+window.addEventListener('resize', () => renderArrows());
+
+// Preload piece images
+Object.values(PIECE_IMG).forEach(url => { const img = new Image(); img.src = url; });
+</script>
+</body>
+</html>
