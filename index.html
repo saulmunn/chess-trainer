@@ -1967,17 +1967,18 @@ function updateExplanation(loading) {
     if (msg.role === 'user') {
       html += `<p style="color:var(--accent);font-size:13px;margin-top:6px"><strong>You:</strong> ${msg.content}</p>`;
     } else {
-      html += `<p>${msg.content}</p>`;
+      html += `<p><strong>Coach:</strong> ${msg.content}</p>`;
     }
   }
   if (loading) {
     html += '<p><span class="spinner" style="display:inline-block;width:14px;height:14px;margin-right:6px;vertical-align:middle"></span>Thinking...</p>';
   }
   // Follow-up input
-  if (S.chatMessages.length > 0 && !loading) {
-    html += `<div style="display:flex;gap:6px;margin-top:8px"><input type="text" id="coach-input" placeholder="Ask a follow-up..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-bright);font-family:'DM Sans',sans-serif;font-size:13px;outline:none" onkeydown="if(event.code==='Enter'){event.preventDefault();sendFollowUp()}"><button class="btn btn-secondary" onclick="sendFollowUp()" style="padding:8px 12px;font-size:13px;white-space:nowrap">Send</button></div>`;
+  if (S.chatMessages.length > 0) {
+    html += `<div style="display:flex;gap:6px;margin-top:8px${loading ? ';opacity:0.5' : ''}"><input type="text" id="coach-input" placeholder="Ask a follow-up..." ${loading ? 'disabled' : ''} style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-bright);font-family:'DM Sans',sans-serif;font-size:13px;outline:none" onkeydown="if(event.code==='Enter'){event.preventDefault();sendFollowUp()}"><button class="btn btn-secondary" onclick="sendFollowUp()" ${loading ? 'disabled' : ''} style="padding:8px 12px;font-size:13px;white-space:nowrap">Send</button></div>`;
   }
   el.innerHTML = html;
+  el.scrollTop = el.scrollHeight;
 }
 
 function updateHistory() {
@@ -2093,6 +2094,7 @@ document.getElementById('start-btn').addEventListener('click', startGame);
 
 // Keyboard: space (advance), arrows (history), escape (exit review)
 document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   // Enter/Return in waiting: skip timer and move on immediately
   if (e.code === 'Enter' && S.phase === 'waiting' && S.viewPly === null) {
     e.preventDefault();

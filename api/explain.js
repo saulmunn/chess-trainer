@@ -42,6 +42,8 @@ module.exports = async function handler(req, res) {
       messages.push(...history);
     }
 
+    const isFollowUp = history && history.length > 0;
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -51,9 +53,9 @@ module.exports = async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-6',
-        max_tokens: 150,
+        max_tokens: isFollowUp ? 400 : 150,
         system:
-          'Chess coach. 1-2 sentences max. Plain text, no markdown. Say why the best move is good and whether the player\'s move was reasonable. Be direct. Answer follow-up questions concisely.',
+          'Chess coach. Plain text, no markdown. Initial explanation: 1-2 sentences — why the best move is good, whether the player\'s move was reasonable. Follow-up answers: match the depth of the question, stay concise.',
         messages,
       }),
     });
